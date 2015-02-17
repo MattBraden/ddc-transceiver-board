@@ -5,7 +5,7 @@
     <ProjectVersion>6.2</ProjectVersion>
     <ToolchainName>com.Atmel.AVRGCC8.C</ToolchainName>
     <ProjectGuid>{7245ea78-7c82-491f-b684-5098f18cae89}</ProjectGuid>
-    <avrdevice>ATmega324P</avrdevice>
+    <avrdevice>ATmega324PA</avrdevice>
     <avrdeviceseries>none</avrdeviceseries>
     <OutputType>Executable</OutputType>
     <Language>C</Language>
@@ -98,6 +98,21 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="DigitalDynamicCluster.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="MCP2515_defs.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="spi.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="spi.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="uart.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="uart.h">
       <SubType>compile</SubType>
     </Compile>
   </ItemGroup>
