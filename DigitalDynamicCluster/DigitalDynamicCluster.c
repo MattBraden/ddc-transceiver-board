@@ -8,7 +8,7 @@
 // TODO: Define cpu and baud here instead of in the uart.h
 #define F_CPU 16000000UL // 16 MHz
 //#define BAUD 115200
-// Warren test
+
 #include <util/delay.h>
 #include <stdlib.h>
 #include <avr/io.h>
@@ -22,6 +22,10 @@
 #define WIFI_ACTIVE PORTB &= ~_BV(PORTB3)
 #define MCP2515_IDLE PORTB |= _BV(PORTB4)
 #define MCP2515_ACTIVE PORTB &= ~_BV(PORTB4)
+
+uint16_t RPM;
+uint8_t gSIDH, gSIDL, gEID8, gEID0, gDLC;
+uint8_t gData[8];
 
 void CANWrite(uint8_t addr, uint8_t data)
 {
@@ -77,8 +81,8 @@ void MSrequest(uint8_t block, uint16_t offset, uint8_t req_bytes)
 	EID8 = 0b10011000; //:7 msg_req, from id 3 (4:3)
 	
 	//      TBBBBBSS To, Block, Spare
-	EID0 = ( ( block & 0b00001111) << 3); // last 4 bits, move them to 6:3
-	EID0 = ((( block & 0b00010000) >> 2) | EID0); // bit 5 goes to :2
+	EID0 = (( block & 0b00001111) << 3); // last 4 bits, move them to 6:3
+	EID0 = (((block & 0b00010000) >> 2) | EID0); // bit 5 goes to :2
 	
 	DLC = 0b00000011;
 	D0=(block);
@@ -106,6 +110,15 @@ void MSrequest(uint8_t block, uint16_t offset, uint8_t req_bytes)
 	CANWrite(CANINTF,0x00);
 }
 
+void interruptInit(void) {
+	// Set up external interrupts for INT0, falling edge
+	EICRA = 0b00000010;
+	// Enable INT0
+	EIMSK = 0b00000001;
+	// Enable global interrupts
+	sei();
+}
+
 ISR(SPI_STC_vect) {
 	uartPutString("Interrupt\n");
 	// Wait to receive data from slave
@@ -113,11 +126,69 @@ ISR(SPI_STC_vect) {
 	// Do something with received data
 }
 
+ISR(INT0_vect) {
+	uint8_t SIDH, SIDL, EID8, EID0, DLC;
+	uint8_t databuffer[7];
+	uint8_t canintf;
+
+	// Initialize everything
+	SIDH = SIDL = EID8 = EID0 = DLC = 0;
+
+	canintf = CANRead(CANINTF);
+	if (canintf & 0b00000001) {
+		SIDH=CANRead(RXB0SIDH);
+		SIDL=CANRead(RXB0SIDL);
+		EID8=CANRead(RXB0EID8);
+		EID0=CANRead(RXB0EID0);
+		DLC=CANRead(RXB0DLC);
+		databuffer[0]=CANRead(RXB0D0);
+		databuffer[1]=CANRead(RXB0D1);
+		databuffer[2]=CANRead(RXB0D2);
+		databuffer[3]=CANRead(RXB0D3);
+		databuffer[4]=CANRead(RXB0D4);
+		databuffer[5]=CANRead(RXB0D5);
+		databuffer[6]=CANRead(RXB0D6);
+		databuffer[7]=CANRead(RXB0D7);
+	}
+	else if (canintf & 0b00000010)
+	{
+		SIDH=CANRead(RXB1SIDH);
+		SIDL=CANRead(RXB1SIDL);
+		EID8=CANRead(RXB1EID8);
+		EID0=CANRead(RXB1EID0);
+		DLC=CANRead(RXB0DLC);
+		databuffer[0]=CANRead(RXB1D0);
+		databuffer[1]=CANRead(RXB1D1);
+		databuffer[2]=CANRead(RXB1D2);
+		databuffer[3]=CANRead(RXB1D3);
+		databuffer[4]=CANRead(RXB1D4);
+		databuffer[5]=CANRead(RXB1D5);
+		databuffer[6]=CANRead(RXB1D6);
+		databuffer[7]=CANRead(RXB1D7);
+	}
+
+	gSIDH=SIDH; // copy to global vars
+	gSIDL=SIDL;
+	gEID8=EID8;
+	gEID0=EID0;
+	gDLC=DLC;
+
+	for (uint8_t x=0; x <= 7; x++)
+	{
+		gData[x]=databuffer[x];
+	}
+
+	RPM = (uint16_t)((databuffer[0] << 8) | databuffer[1]);
+
+	CANWrite(CANINTF, 0x00); // clear interrupt
+}
+
 int main(void) {
 	spiInit();
 	uartInit();
 	mcp2515Init();
-	//sei();
+	interruptInit();
+
 	uint8_t count = 0;
 	char buffer[5];
 	MSrequest(7, 6, 2);
