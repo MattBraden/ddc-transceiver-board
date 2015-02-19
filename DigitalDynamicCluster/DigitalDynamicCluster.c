@@ -8,7 +8,7 @@
 // TODO: Define cpu and baud here instead of in the uart.h
 #define F_CPU 16000000UL // 16 MHz
 //#define BAUD 115200
-// Warren test
+
 #include <util/delay.h>
 #include <stdlib.h>
 #include <avr/io.h>
@@ -22,6 +22,11 @@
 #define WIFI_ACTIVE PORTB &= ~_BV(PORTB3)
 #define MCP2515_IDLE PORTB |= _BV(PORTB4)
 #define MCP2515_ACTIVE PORTB &= ~_BV(PORTB4)
+
+// Variable Declarations
+uint8_t gSIDH, gSIDL, gEID8, gEID0, gDLC; // Unknown purpose
+uint8_t gDATA[8]; // Unknown purpose
+uint8_t RPM; // RPM value from packet
 
 void CANWrite(uint8_t addr, uint8_t data)
 {
@@ -106,27 +111,97 @@ void MSrequest(uint8_t block, uint16_t offset, uint8_t req_bytes)
 	CANWrite(CANINTF,0x00);
 }
 
-ISR(SPI_STC_vect) {
+ISR(SPI_STC_vect)
+{
 	uartPutString("Interrupt\n");
 	// Wait to receive data from slave
-	//uint8_t data = spiReceive();
+	// uint8_t data = spiReceive();
 	// Do something with received data
 }
 
-int main(void) {
+ISR(INT0_vect)
+{
+	uint8_t SIDH, SIDL, EID8, EID0, DLC;
+	uint8_t databuffer[7];
+	unsigned int data;
+	uint8_t block, canintf, temp;
+	unsigned int offset;
+
+	canintf=CANRead(CANINTF);
+	if (canintf & 0x1)
+	{
+		SIDH=CANRead(RXB0SIDH);
+		SIDL=CANRead(RXB0SIDL);
+		EID8=CANRead(RXB0EID8);
+		EID0=CANRead(RXB0EID0);
+		DLC=CANRead(RXB0DLC);
+		databuffer[0]=CANRead(RXB0D0);
+		databuffer[1]=CANRead(RXB0D1);
+		databuffer[2]=CANRead(RXB0D2);
+		databuffer[3]=CANRead(RXB0D3);
+		databuffer[4]=CANRead(RXB0D4);
+		databuffer[5]=CANRead(RXB0D5);
+		databuffer[6]=CANRead(RXB0D6);
+		databuffer[7]=CANRead(RXB0D7);
+	}
+	else if (canintf & 0x2)
+	{
+		SIDH=CANRead(RXB1SIDH);
+		SIDL=CANRead(RXB1SIDL);
+		EID8=CANRead(RXB1EID8);
+		EID0=CANRead(RXB1EID0);
+		DLC=CANRead(RXB0DLC);
+		databuffer[0]=CANRead(RXB1D0);
+		databuffer[1]=CANRead(RXB1D1);
+		databuffer[2]=CANRead(RXB1D2);
+		databuffer[3]=CANRead(RXB1D3);
+		databuffer[4]=CANRead(RXB1D4);
+		databuffer[5]=CANRead(RXB1D5);
+		databuffer[6]=CANRead(RXB1D6);
+		databuffer[7]=CANRead(RXB1D7);
+	}
+
+	gSIDH = SIDH; // copy to global vars
+	gSIDL = SIDL;
+	gEID8 = EID8;
+	gEID0 = EID0;
+	gDLC = DLC;
+	
+	for (uint8_t x=0 ; x <= 7; x++)
+	{
+		gDATA[x]=databuffer[x];
+	}
+
+	RPM=(int)(word(databuffer[0], databuffer[1]));
+
+	CANWrite(CANINTF, 0x00); // clear interrupt
+}
+
+
+int main(void)
+{
+	// Initialize SPI communication
 	spiInit();
+	
+	// Initialize USB communication
 	uartInit();
+	
+	// Initialize MCP2515 CAN Controller
 	mcp2515Init();
-	//sei();
+	
 	uint8_t count = 0;
 	char buffer[5];
-	MSrequest(7, 6, 2);
 	
-	while(1) {
+	while(1)
+	{
+		// 
 		 itoa(count++, buffer, 10);
 		 uartPutString(buffer);
 		 uartPutString("\n");
 		 spiTransceiver(count);
 		 _delay_ms(500);
+		 
+		 MSrequest(7, 6, 2);
+		 uartPutString("RPM Value: ");
     }
 }
