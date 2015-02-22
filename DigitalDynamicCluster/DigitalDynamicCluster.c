@@ -23,7 +23,7 @@
 #define MCP2515_IDLE PORTB |= _BV(PORTB4)
 #define MCP2515_ACTIVE PORTB &= ~_BV(PORTB4)
 
-uint16_t RPM;
+uint16_t RPM = 0;
 uint8_t gSIDH, gSIDL, gEID8, gEID0, gDLC;
 uint8_t gData[8];
 
@@ -60,8 +60,10 @@ void mcp2515Init(void) {
 	_delay_ms(10);
 	CANWrite(RXB0CTRL, 0b01101000); //RXB0CTRL clear receive buffers
 	CANWrite(RXB1CTRL,	0b01101000); //RXB1CTRL clear receive buffers
-	CANWrite(CANINTE, 0b00000011); // enable interrupt on RXB0, RXB1
-	CANWrite(BFPCTRL, 0b00001111); // setting interrupts
+	//CANWrite(CANINTE, 0b00000011); // enable interrupt on RXB0, RXB1
+	CANWrite(CANINTE, 0b00011111); // enable interrupts on all pins
+	//CANWrite(BFPCTRL, 0b00001111); // setting interrupts
+	CANWrite(BFPCTRL, 0b00111111);
 }
 
 void MSrequest(uint8_t block, uint16_t offset, uint8_t req_bytes)
@@ -194,20 +196,18 @@ int main(void)
 	// Initialize MCP2515 CAN Controller
 	mcp2515Init();
 
+	// Initialize external interrupts
 	interruptInit();
 
-	uint8_t count = 0;
-	char buffer[5];
+	char buffer[10];
 	
-	while(1)
-	{ 
-		 itoa(count++, buffer, 10);
-		 uartPutString(buffer);
-		 uartPutString("\n");
-		 spiTransceiver(count);
-		 _delay_ms(500);
-		 
-		 MSrequest(7, 6, 2);
-		 uartPutString("RPM Value: ");
+	MSrequest(7, 6, 2);
+	while(1) { 
+		MSrequest(7, 6, 2);
+		itoa(RPM, buffer, 10);
+		uartPutString(buffer);		
+		uartPutString("\n");
+		spiTransceiver(RPM);
+		_delay_ms(500);
     }
 }
